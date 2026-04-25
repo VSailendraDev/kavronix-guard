@@ -1,246 +1,272 @@
 # @kavronix/guard
 
-> **Zod validates your data. Kavronix Guard validates your agents.**
+> Zod validates your data.
+> **Kavronix Guard validates your agents.**
 
-Runtime contract enforcement for AI agents by [Kavronix](https://kavronix.com). Define what your agents can do, must never do, and what shape their output must be — then enforce it at runtime with zero trust.
+![npm](https://img.shields.io/npm/v/@kavronix/guard)
+![downloads](https://img.shields.io/npm/dm/@kavronix/guard)
+![license](https://img.shields.io/npm/l/@kavronix/guard)
+
+A TypeScript-first **runtime enforcement layer for AI agents**.
+
+Define what agents can do, must never do, and what shape their output must be — then enforce it at runtime with zero trust.
 
 ---
 
-## Install
+## ❌ The Problem
 
-```bash
-npm install @kavronix/guard zod
-```
+AI agents don’t fail loudly.
+
+They fail silently:
+
+* calling the wrong tools
+* returning invalid JSON
+* leaking sensitive data
+* routing to the wrong agent
+
+By the time you notice — your system is already corrupted.
 
 ---
 
-## Quick Start
+## ✅ The Solution
+
+**@kavronix/guard** introduces a missing layer:
+
+> A **contract enforcement runtime** for AI agents
+
+It guarantees:
+
+* 🔒 Tool access control
+* 📜 Strict output validation (Zod)
+* 🚫 Forbidden patterns (PII, secrets)
+* 🔀 Safe, typed agent handoffs
+* ⏱️ Timeout enforcement
+* 🔁 Retry / fallback strategies
+
+---
+
+## ⚡ Quick Start
 
 ```ts
-import { z } from 'zod';
-import { defineAgent, enforce } from '@kavronix/guard';
+import { z } from 'zod'
+import { defineAgent, enforce } from '@kavronix/guard'
 
-// 1. Define your agent's contract
 const TriageAgent = defineAgent({
   name: 'TriageAgent',
-  description: 'Classifies incoming support tickets',
+  description: 'Classifies support tickets',
+
   scope: {
-    tools: ['classifyTicket', 'lookupUser'],
-    topics: ['billing', 'technical', 'general'],
-    maxSteps: 3,
-    timeoutMs: 10000,
+    tools: ['classifyTicket'],
+    maxSteps: 2,
   },
+
   forbidden: {
-    tools: ['deleteUser', 'sendEmail'],
-    outputPatterns: [/password/i, /ssn/i],
+    tools: ['deleteUser'],
+    outputPatterns: [/password/i],
   },
+
   outputSchema: z.object({
     intent: z.enum(['billing', 'technical', 'general']),
-    confidence: z.number().min(0).max(1),
-    summary: z.string(),
+    confidence: z.number(),
   }),
-  handoffPolicy: {
-    allowed: ['BillingAgent', 'TechAgent'],
-  },
-  onViolation: {
-    strategy: 'fallback',
-    fallbackOutput: { intent: 'general', confidence: 0, summary: 'Unable to classify' },
-    onExecution: (event) => console.log(`[guard] ${event.type}`, event.detail),
-  },
-});
+})
 
-// 2. Enforce the contract at runtime
 const result = await enforce(TriageAgent, {
-  input: 'My invoice is wrong',
-  call: async (systemPrompt, allowedTools, userInput) => {
-    // Call your LLM here (Claude, OpenAI, Gemini, etc.)
-    const response = await yourLLMCall(systemPrompt, allowedTools, userInput);
+  input: 'I was charged twice',
+  call: async (systemPrompt, allowedTools, input) => {
+    // plug your LLM here
     return {
-      rawText: response.text,
-      toolCallsMade: response.toolCalls,
-      tokenCount: response.tokens,
+      rawText: JSON.stringify({
+        intent: 'billing',
+        confidence: 0.92,
+      }),
       steps: 1,
-    };
+    }
   },
-});
+})
 
-console.log(result.data);       // { intent: 'billing', confidence: 0.95, summary: '...' }
-console.log(result.meta);       // { violations: [], stepsUsed: 1, ... }
+console.log(result.data.intent) // billing
 ```
 
 ---
 
-## Full API Reference
+## 🚨 What Happens on Failure?
 
-### `defineAgent<TSchema>(config: TetherConfig<TSchema>): Tether<TSchema>`
+```ts
+simulateToolCalls: [{ name: 'deleteUser' }]
+```
 
-Creates an agent contract.
+```bash
+[TetherViolationError] FORBIDDEN_TOOL
+```
+
+👉 The agent is stopped before it can break your system.
+
+---
+
+## 🔀 Multi-Agent Handoffs
+
+```ts
+import { handoff } from '@kavronix/guard'
+
+const protocol = handoff({
+  from: TriageAgent,
+  to: BillingAgent,
+
+  requiredContext: z.object({
+    intent: z.literal('billing'),
+    ticketId: z.string(),
+  }),
+
+  redact: ['ticketId'],
+  conditions: [(ctx) => ctx.intent === 'billing'],
+  audit: true,
+})
+```
+
+---
+
+## 🛡️ Built for Production
+
+* Hard vs soft violation separation
+* Prompt injection protection
+* Structured audit events
+* Adapter-agnostic (Claude, OpenAI, Gemini)
+* Zero runtime dependencies (except Zod)
+
+---
+
+# 📘 Detailed Usage
+
+---
+
+## defineAgent
 
 ```ts
 const agent = defineAgent({
   name: 'MyAgent',
   version: '1.0.0',
-  description: 'What this agent does',
-  scope: { tools: [...], topics: [...], maxSteps: 5, maxTokensOut: 500, timeoutMs: 10000 },
-  forbidden: { tools: [...], topics: [...], outputPatterns: [/regex/] },
-  outputSchema: z.object({ ... }),
-  handoffPolicy: { allowed: ['OtherAgent'] },
-  onViolation: {
-    strategy: 'throw' | 'warn' | 'fallback' | 'retry',
-    fallbackOutput: {...},
-    onExecution: (event) => { /* start, adapter_call, violation, retry, end */ },
+  description: 'Agent description',
+
+  scope: {
+    tools: ['lookup'],
+    topics: ['billing'],
+    maxSteps: 5,
+    maxTokensOut: 500,
+    timeoutMs: 10000,
   },
-  memory: { access: 'session', canWrite: true },
-});
+
+  forbidden: {
+    tools: ['delete'],
+    topics: ['internal'],
+    outputPatterns: [/password/i],
+  },
+
+  outputSchema: z.object({
+    result: z.string(),
+  }),
+
+  handoffPolicy: {
+    allowed: ['OtherAgent'],
+  },
+
+  onViolation: {
+    strategy: 'fallback',
+    fallbackOutput: { result: 'safe fallback' },
+  },
+
+  memory: {
+    access: 'session',
+    canWrite: true,
+  },
+})
 ```
 
-### `enforce<TSchema>(contract, options): Promise<EnforceResult<T>>`
+---
 
-Runs an LLM call through the contract enforcement pipeline.
-
-- Validates tool calls against scope/forbidden lists
-- Checks output against forbidden patterns
-- Parses and validates output against the Zod schema
-- Enforces `timeoutMs` with `Promise.race`
-- Separates **hard** violations (forbidden tool, bad schema, timeout) from **soft** violations (max steps/tokens exceeded)
-- Handles violations according to the configured strategy
-- Wraps user input to prevent prompt injection
-
-### `handoff(config): HandoffProtocol`
-
-Creates a typed handoff protocol between two agents.
+## enforce
 
 ```ts
-const protocol = handoff({
-  from: TriageAgent,
-  to: BillingAgent,
-  requiredContext: z.object({ intent: z.string(), ticketId: z.string() }),
-  redact: ['ticketId'],
-  conditions: [(ctx) => ctx.intent === 'billing'],
-  audit: true,
-});
-
-const result = await protocol.execute({
-  context: { intent: 'billing', ticketId: 'T-123' },
-  call: async (ctx, systemPrompt) => { ... },
-});
+const result = await enforce(agent, {
+  input: 'user input',
+  call: adapter,
+})
 ```
 
-### `compilePrompt(contract, overrides?): string`
+Enforces:
 
-Generates the system prompt from a contract without running `enforce()`.
+* tool usage
+* schema validation
+* forbidden patterns
+* token / step limits
+* timeout handling
 
-### `TetherViolationError`
+---
 
-Error class thrown when `onViolation.strategy === 'throw'`. Contains a `.violation` property with the full `ViolationEvent` (including `severity`).
+## Violation Strategies
 
-### `VIOLATION_SEVERITY`
-
-A `Record<ViolationType, ViolationSeverity>` mapping each violation type to `'soft'` or `'hard'`.
+```ts
+onViolation: {
+  strategy: 'throw' | 'warn' | 'fallback' | 'retry',
+}
+```
 
 ---
 
 ## Adapters
 
-All adapters return an `AdapterFn` compatible with `enforce()`'s `call` signature.
-
-### Claude (Anthropic)
+### Claude
 
 ```ts
-import Anthropic from '@anthropic-ai/sdk';
-import { claudeAdapter, enforce } from '@kavronix/guard';
+import Anthropic from '@anthropic-ai/sdk'
+import { claudeAdapter } from '@kavronix/guard'
 
-const client = new Anthropic();
-const adapter = claudeAdapter(client, { model: 'claude-sonnet-4-6' });
+const client = new Anthropic()
 
-const result = await enforce(MyAgent, {
-  input: 'Hello',
-  call: adapter,
-});
-```
-
-### OpenAI
-
-```ts
-import OpenAI from 'openai';
-import { openaiAdapter, enforce } from '@kavronix/guard';
-
-const client = new OpenAI();
-const adapter = openaiAdapter(client, { model: 'gpt-4o' });
-
-const result = await enforce(MyAgent, {
-  input: 'Hello',
-  call: adapter,
-});
-```
-
-### Google Gemini
-
-```ts
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { geminiAdapter, enforce } from '@kavronix/guard';
-
-const client = new GoogleGenerativeAI(process.env.GEMINI_KEY);
-const adapter = geminiAdapter(client, { model: 'gemini-2.0-flash' });
-
-const result = await enforce(MyAgent, {
-  input: 'Hello',
-  call: adapter,
-});
+await enforce(agent, {
+  input: 'hello',
+  call: claudeAdapter(client),
+})
 ```
 
 ---
 
-## Testing
-
-`@kavronix/guard` ships built-in testing utilities at `@kavronix/guard/testing`.
-
-### `mockAgent(contract, options)`
-
-Creates a mock LLM adapter for testing without real API calls.
+### OpenAI
 
 ```ts
-import { mockAgent } from '@kavronix/guard/testing';
+import OpenAI from 'openai'
+import { openaiAdapter } from '@kavronix/guard'
 
-const mock = mockAgent(MyAgent, {
-  alwaysOutput: { intent: 'billing', confidence: 0.9 },
-  simulateToolCalls: [{ name: 'lookup', input: {} }],
-});
+const client = new OpenAI()
+
+await enforce(agent, {
+  input: 'hello',
+  call: openaiAdapter(client),
+})
 ```
 
-### `contractSuite(contract)`
+---
 
-Provides pre-built test helpers for common contract assertions.
+### Gemini
 
 ```ts
-import { contractSuite } from '@kavronix/guard/testing';
+import { geminiAdapter } from '@kavronix/guard'
 
-const suite = contractSuite(MyAgent);
-
-// Run with mock and get result
-const result = await suite.run();
-
-// Assert forbidden tools are caught
-await suite.assertNeverCalls(['deleteUser', 'sendEmail']);
-
-// Assert output schema is valid
-await suite.assertOutputValid();
+await enforce(agent, {
+  input: 'hello',
+  call: geminiAdapter(client),
+})
 ```
 
-### Assertion Helpers
+---
+
+## 🧪 Testing (No LLM Required)
 
 ```ts
-import {
-  assertNoViolations,
-  assertViolationType,
-  assertOutputShape,
-  assertHandoffTriggered,
-} from '@kavronix/guard/testing';
+import { contractSuite, mockAgent } from '@kavronix/guard/testing'
 
-assertNoViolations(result);
-assertViolationType(result, 'FORBIDDEN_TOOL');
-assertOutputShape(result, mySchema);
-assertHandoffTriggered(result, 'BillingAgent');
+await contractSuite(agent).assertNeverCalls(['deleteUser'])
+await contractSuite(agent).assertOutputValid()
 ```
 
 ---
@@ -248,37 +274,35 @@ assertHandoffTriggered(result, 'BillingAgent');
 ## CLI
 
 ```bash
-# Validate contract files
-kavronix-guard validate ./agents/**/*.contract.ts
-
-# Audit a run log for violations
-kavronix-guard audit ./logs/run-2026-04-18.jsonl
-
-# Check for conflicts between agent contracts
+kavronix-guard validate ./agents/**/*.ts
+kavronix-guard audit ./logs/run.jsonl
 kavronix-guard conflicts ./agents/
 ```
 
 ---
 
-## Why Kavronix Guard?
+## 🧠 Philosophy
 
-Multi-agent systems fail silently. An agent calls a tool it shouldn't. Another leaks PII in its output. A third hands off to an agent it has no business talking to.
-
-**@kavronix/guard** makes these failures loud, typed, and preventable:
-
-- **Compile-time safety** — TypeScript-first, Zod-powered schemas
-- **Runtime enforcement** — every LLM call is validated before it reaches your app
-- **Severity-aware** — hard violations (forbidden tool, bad schema) vs soft signals (token limits)
-- **Timeout enforcement** — kills runaway agent calls with configurable `timeoutMs`
-- **Prompt injection protection** — user input is isolated from system instructions
-- **Execution hooks** — `onExecution` callback for start/end/retry/violation tracing
-- **Zero external deps** — only Zod as a peer dependency
-- **Adapter-agnostic** — works with Claude, OpenAI, Gemini, or any LLM
-- **Test-friendly** — built-in mocks and contract test suites
-- **Audit-ready** — structured violation events for logging and compliance
+> AI agents should be governed systems, not probabilistic chaos.
 
 ---
 
-## License
+## 🚀 Why Kavronix Guard
 
-MIT © [Kavronix](https://kavronix.com)
+Because prompts are not contracts.
+
+Production systems need guarantees.
+
+---
+
+## 📦 Install
+
+```bash
+npm install @kavronix/guard zod
+```
+
+---
+
+## 📄 License
+
+MIT © Kavronix
