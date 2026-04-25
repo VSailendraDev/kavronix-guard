@@ -5,14 +5,25 @@
   "keywords": [
     "ai",
     "agents",
+    "ai-agents",
     "llm",
     "kavronix",
     "guard",
+    "guardrails",
     "contract",
     "validation",
+    "runtime-validation",
+    "enforcement",
     "typescript",
     "zod",
-    "enforcement"
+    "tool-calling",
+    "safety",
+    "openai",
+    "claude",
+    "gemini",
+    "multi-agent",
+    "prompt-injection",
+    "agent-framework"
   ],
   "author": "sailendra.volety",
   "repository": {
