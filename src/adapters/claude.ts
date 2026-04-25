@@ -5,7 +5,7 @@ import type { RawLLMResponse } from './base.js';
  * 
  * Usage:
  *   import Anthropic from '@anthropic-ai/sdk';
- *   import { claudeAdapter } from 'tether/adapters/claude';
+ *   import { claudeAdapter } from '@kavronix/guard';
  * 
  *   const client = new Anthropic();
  *   const adapter = claudeAdapter(client, { model: 'claude-sonnet-4-6' });
