@@ -4,6 +4,14 @@
   "description": "Runtime contract enforcement for AI agents — Kavronix Guard validates your agents like Zod validates your data.",
   "keywords": ["ai", "agents", "llm", "kavronix", "guard", "contract", "validation", "typescript", "zod", "enforcement"],
   "author": "sailendra.volety",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VSailendraDev/kavronix-guard.git"
+  },
+  "homepage": "https://github.com/VSailendraDev/kavronix-guard#readme",
+  "bugs": {
+    "url": "https://github.com/VSailendraDev/kavronix-guard/issues"
+  },
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.cjs",
