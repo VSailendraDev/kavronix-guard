@@ -28,7 +28,7 @@
   "author": "sailendra.volety",
   "repository": {
     "type": "git",
-    "url": "https://github.com/VSailendraDev/kavronix-guard.git"
+    "url": "git+https://github.com/VSailendraDev/kavronix-guard.git"
   },
   "homepage": "https://github.com/VSailendraDev/kavronix-guard#readme",
   "bugs": {
@@ -41,23 +41,23 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "require": "./dist/index.cjs",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.cjs"
     },
     "./testing": {
+      "types": "./dist/testing/index.d.ts",
       "import": "./dist/testing/index.js",
-      "require": "./dist/testing/index.cjs",
-      "types": "./dist/testing/index.d.ts"
+      "require": "./dist/testing/index.cjs"
     },
     "./cli": {
+      "types": "./dist/cli/index.d.ts",
       "import": "./dist/cli/index.js",
-      "require": "./dist/cli/index.cjs",
-      "types": "./dist/cli/index.d.ts"
+      "require": "./dist/cli/index.cjs"
     }
   },
   "bin": {
-    "kavronix-guard": "./dist/cli/index.js"
+    "kavronix-guard": "dist/cli/index.js"
   },
   "publishConfig": {
     "access": "public"
